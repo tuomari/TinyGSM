@@ -103,7 +103,7 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
       stop();
       TINY_GSM_YIELD();
       rx.clear();
-      Serial.println("Connecting with NRF9160 TinyGSM");
+      DBG("Connecting with NRF9160 TinyGSM");
       sock_connected = at->modemConnect(host, port, mux, false, timeout_s);
       return sock_connected;
     }
@@ -115,19 +115,19 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
       dumpModemBuffer(maxWaitMs);
       //at->sendAT(GF("+CIPCLOSE="), mux);
 
-      Serial.println("Stopping gsm client.");
+      DBG("Stopping gsm client.");
       uint8_t request_op   = 0; // 1 = port open request
       uint8_t request_type = 1; // 1 = SOCK_STREAM for TCP (protocol)
       uint8_t request_role = 0; // 0 = client
       at->sendAT(GF("#XSOCKET="), GF("0,1,0"));
       sock_connected = false;
-      //Serial.println("waiting response");
+      //DBG("waiting response");
 //      if(at->waitResponse(timeout_ms, GF("#XSOCKET:")) == 1) {
       if(at->waitResponse(timeout_ms, GF("OK")) == 1) {
         at->streamSkipUntil('\n');
       }
 
-      Serial.println("waiting stop response done");
+      DBG("waiting stop response done");
     }
 
 
@@ -252,12 +252,12 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
    * Power functions
    */
  protected:
-  bool restartImpl() {
+  bool restartImpl(const char* pin = NULL) {
     if (!testAT()) { return false; }
     sendAT(GF("#XRESET"));
     if (waitResponse(10000L) != 1) { return false; }
     delay(5000L);  // TODO(?):  Test this delay!
-    return init();
+    return init(pin);
   }
 
   bool powerOffImpl() {
@@ -319,13 +319,13 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
     int i4 = res.indexOf(',', i3+1);
     int i5 = res.indexOf(',', i4+1);
 
-    String rxlev = res.substring(0, i1);
+    /*String rxlev = res.substring(0, i1);
     String ber = res.substring(i1 + 1, i2);
     String rscp = res.substring(i2 + 1, i3);
     String ecno = res.substring(i3 + 1, i4);
     String rsrq = res.substring(i4 + 1, i5);
     String rsrp = res.substring(i5 + 1);    
-
+*/
     int myInt = 140-rsrp.toInt(); // -140dBm is minimum
     return myInt;
   }
@@ -411,7 +411,7 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
 
     // set modem in offline mode
     sendAT(GF("+CFUN=4"));
-    waitResponse();
+    return waitResponse() > 0;
   }
 
   bool isGprsConnectedImpl() {
@@ -732,19 +732,19 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
     uint8_t result_role     = streamGetIntBefore(',');
     uint8_t result_protocol = streamGetIntBefore('\n'); // 6 = IPPROTO_TCP
 
-    Serial.printf("fd: %i op: %i, type: %i %i, role: %i %i", result_fd, request_op, request_type, result_type, request_role, result_role);
+   // Serial.printf("fd: %i op: %i, type: %i %i, role: %i %i", result_fd, request_op, request_type, result_type, request_role, result_role);
     //if( result_fd < 0 || request_type != result_type || request_role != result_role) {return false;}
 
     //return false;
-    Serial.println("Waiting for ok");
+    DBG("Waiting for ok");
 
     // wait for ok
     if (waitResponse(5000, "OK") != 1) {
-        Serial.println("Timeouted for xsocket OK");
+        DBG("Timeouted for xsocket OK");
         //    return false;
     }
 
-    Serial.println("Received ok");
+    DBG("Received ok");
 
     //socket options, receive timeout 2 seconds
     //sendAT(GF("#XSOCKETOPT="), GF("1,20,2"));
@@ -786,14 +786,6 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
     int timeout_s = 15;
     uint32_t timeout_ms = ((uint32_t)timeout_s) * 1000;
 
-
-    //Serial.print("len = ");
-    //Serial.println(len);
-    //Serial.print("block_count = ");
-    //Serial.println(block_count);
-    //Serial.print("block_count_last = ");
-    //Serial.println(block_count_last);
-
     for(uint8_t j = 0; j < (block_count + 1); j++) {
 
       uint8_t attempt_count = NRF9160_RETRY_COUNT; //set attempt count
@@ -805,28 +797,13 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
         }
 
         stream.write("AT#XSENDHEX=\""); //0 = hex data, 1 = text data
-//Serial.print("j = ");
-  //      Serial.println(j);
 
         for(size_t i = 0; i < NRF9160_NET_IPV4_MTU_SIZE_TX; i++) {
-    //      Serial.print("i = ");
-      //    Serial.println(i);
 
           buff_index = (j * NRF9160_NET_IPV4_MTU_SIZE_TX) + i;
 
-          //Serial.print("buff_index = ");
-          //Serial.println(buff_index);
 
           if((size_t)buff_index == (size_t)len) {
-            /*
-            Serial.println("buff_index == lenth, break");
-            Serial.print("j = ");
-            Serial.println(j);
-            Serial.print("i = ");
-            Serial.println(i);
-            Serial.print("buff_index = ");
-            Serial.println(buff_index);
-            */
             break;
           }
           tempchar = reinterpret_cast<const uint8_t*>(buff)[buff_index];
@@ -848,7 +825,7 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
 
         attempt_count -= 1;
         if(attempt_count == 0) {
-          Serial.println("retry, attempt_count == 0, break");
+          DBG("retry, attempt_count == 0, break");
           return false;
         }
         //short delay
