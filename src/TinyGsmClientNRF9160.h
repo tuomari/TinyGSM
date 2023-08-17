@@ -319,13 +319,13 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
     int i4 = res.indexOf(',', i3+1);
     int i5 = res.indexOf(',', i4+1);
 
-    /*String rxlev = res.substring(0, i1);
+    String rxlev = res.substring(0, i1);
     String ber = res.substring(i1 + 1, i2);
     String rscp = res.substring(i2 + 1, i3);
     String ecno = res.substring(i3 + 1, i4);
     String rsrq = res.substring(i4 + 1, i5);
     String rsrp = res.substring(i5 + 1);    
-*/
+
     int myInt = 140-rsrp.toInt(); // -140dBm is minimum
     return myInt;
   }
