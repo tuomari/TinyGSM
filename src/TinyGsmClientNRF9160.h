@@ -1035,7 +1035,7 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
           // todo
           // not working,, we never get here...
           // supposed to detect a port closing, but we aren't
-          int8_t mux = 1;
+          int8_t mux = 0;
           uint8_t result_op = streamGetIntBefore(',');
           streamSkipUntil('\n');
           //if (result_op == 0) {
