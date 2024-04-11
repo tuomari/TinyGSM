@@ -851,9 +851,9 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
     if (!sockets[mux]) return 0;
     int timeout_s = 5;
     uint32_t timeout_ms = ((uint32_t)timeout_s) * 1000;
-    sendAT(GF("#XRECVHEX="), timeout_ms, (uint16_t)size);
     if (waitResponse(timeout_ms, GF("#XRECVHEX:")) != 1) { return 0; }
-    int16_t datatype = streamGetIntBefore(',');
+    sendAT(GF("#XRECVHEX="), timeout_s, ",", (uint16_t)size, ",0");
+    int datatype = 0;
     //  ^^ Requested number of data bytes (1-1460 bytes)to be read
     int16_t len_requested = size;
     int16_t len_confirmed = streamGetIntBefore('\n');
