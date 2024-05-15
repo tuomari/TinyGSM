@@ -27,7 +27,8 @@ class TinyGsmModem {
   inline void sendAT(Args... cmd) {
     thisModem().streamWrite("AT", cmd..., thisModem().gsmNL);
     thisModem().stream.flush();
-    TINY_GSM_YIELD(); /* DBG("### AT:", cmd...); */
+    TINY_GSM_YIELD();
+     DBG("### AT:", cmd...); 
   }
   void setBaud(uint32_t baud) {
     thisModem().setBaudImpl(baud);
