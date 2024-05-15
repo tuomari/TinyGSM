@@ -111,7 +111,7 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
 
     void stop(uint32_t maxWaitMs) {
       int timeout_s = 5;
-      uint32_t timeout_ms = ((uint32_t)timeout_s) * 5000;
+      uint32_t timeout_ms = ((uint32_t)timeout_s) * 1000;
       dumpModemBuffer(maxWaitMs);
       //at->sendAT(GF("+CIPCLOSE="), mux);
 
@@ -774,14 +774,11 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
     return true;
   }
 
-  int16_t modemSend(const void* buff, size_t buff_len, uint8_t mux) {
-    uint8_t tempchar;
-    size_t buff_index;
+  int16_t modemSend(const uint8_t* buff, size_t buff_len, uint8_t mux) {
     size_t result_len = 0;
     size_t len = buff_len;
 
     uint8_t block_count = (uint8_t)(buff_len / NRF9160_NET_IPV4_MTU_SIZE_TX);
-    size_t block_count_last = (size_t)(buff_len % NRF9160_NET_IPV4_MTU_SIZE_TX);
 
     int timeout_s = 15;
     uint32_t timeout_ms = ((uint32_t)timeout_s) * 1000;
@@ -797,26 +794,30 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
         }
 
         stream.write("AT#XSENDHEX=\""); //0 = hex data, 1 = text data
+Serial.print("Sending data block: ");
+Serial.println(j);
 
         for(size_t i = 0; i < NRF9160_NET_IPV4_MTU_SIZE_TX; i++) {
 
-          buff_index = (j * NRF9160_NET_IPV4_MTU_SIZE_TX) + i;
+          size_t buff_index = (j * NRF9160_NET_IPV4_MTU_SIZE_TX) + i;
 
 
           if((size_t)buff_index == (size_t)len) {
             break;
           }
-          tempchar = reinterpret_cast<const uint8_t*>(buff)[buff_index];
-          if(tempchar < 0x10) {
-            stream.print(static_cast<char>('0'));
-          }
-          stream.print(tempchar, HEX);
+          stream.printf("%02X", buff[buff_index]);
+          uint8_t tempchar = reinterpret_cast<const uint8_t*>(buff)[buff_index];
+          Serial.printf(" %02X", buff[buff_index]);
+      
           //stream.write(reinterpret_cast<const uint8_t*>(buff), len);
         }
         stream.write("\"\r\n", 3);
+        Serial.println();
         stream.flush();
 
         int8_t res1 = waitResponse(timeout_ms, GFP("#XSENDHEX:"), GF("ERROR\r\n"));
+        Serial.print("Received send status ");
+        Serial.println(res1);
 
         if(res1 == 1) {
           break;
@@ -851,39 +852,41 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
     if (!sockets[mux]) return 0;
     int timeout_s = 5;
     uint32_t timeout_ms = ((uint32_t)timeout_s) * 1000;
-    if (waitResponse(timeout_ms, GF("#XRECVHEX:")) != 1) { return 0; }
-    sendAT(GF("#XRECVHEX="), timeout_s, ",", (uint16_t)size, ",0");
+
+
+    sendAT(GF("#XRECVHEX="), 100, ",", (uint16_t)size, ",0");
+    if (waitResponse(timeout_ms, GF("#XRECVHEX:")) != 1) {
+        DBG(" No XRECVHEX response.. Returning with zero read bytes");
+
+        return 0;
+
+    }
     int datatype = 0;
+    //int16_t datatype = streamGetIntBefore(',');
     //  ^^ Requested number of data bytes (1-1460 bytes)to be read
     int16_t len_requested = size;
     int16_t len_confirmed = streamGetIntBefore('\n');
     //DBG(" datatype      = ", datatype);
-    //DBG(" len_requested = ", len_requested);
-    //DBG(" len_confirmed = ", len_confirmed);
+    DBG(" len_requested = ", len_requested);
+    DBG(" len_confirmed = ", len_confirmed);
 
-    if(datatype == 0) {
-      // adjust for binary lenth which is double
+      // adjust for hex length which is double
       len_confirmed = len_confirmed / 2;
-    }
 
     if(len_confirmed > 0) {
       for (int i = 0; i < len_confirmed; i++) {
         uint32_t startMillis = millis();
         char c;
-        if(datatype == 0) { // hex data type, 0xDEADBEED = "DEADBEEF"
-          while (stream.available() < 2 &&
-                 (millis() - startMillis < sockets[mux]->_timeout)) {
+          if (datatype == 0) { // hex data type, 0xDEADBEED = "DEADBEEF"
+              while (stream.available() < 2 && (millis() - startMillis < sockets[mux]->_timeout)) {
             TINY_GSM_YIELD();
           }
-          char buf[4] = {
-              0,
-          };
+          char buf[4] = {0};
           buf[0] = stream.read();
           buf[1] = stream.read();
           c = strtol(buf, NULL, 16);
         } else if(datatype == 1) { //text data type
-          while (!stream.available() &&
-                 (millis() - startMillis < sockets[mux]->_timeout)) {
+              while (!stream.available() && (millis() - startMillis < sockets[mux]->_timeout)) {
             TINY_GSM_YIELD();
           }
           c = stream.read();
