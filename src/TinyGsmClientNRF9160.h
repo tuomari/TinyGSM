@@ -705,7 +705,6 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
    * Client related functions
    */
  protected:
-  bool dataAvailableFlg = false;
   bool modemConnect(const char* host, uint16_t port, uint8_t mux,
                     bool ssl = false, int timeout_s = 15) {
     if (ssl) { DBG("SSL not yet supported on this module!"); }
@@ -794,8 +793,6 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
         }
 
         stream.write("AT#XSENDHEX=\""); //0 = hex data, 1 = text data
-Serial.print("Sending data block: ");
-Serial.println(j);
 
         for(size_t i = 0; i < NRF9160_NET_IPV4_MTU_SIZE_TX; i++) {
 
@@ -843,23 +840,21 @@ Serial.println(j);
       }
     }
     //DBG(" SET dataAvailableFlg = true");
-    dataAvailableFlg = true;
 
     return result_len;
   }
 
-  size_t modemRead(size_t size, uint8_t mux) {
+
+  size_t modemRead(size_t size, uint8_t mux, int timeout_s = 5) {
     if (!sockets[mux]) return 0;
-    int timeout_s = 5;
     uint32_t timeout_ms = ((uint32_t)timeout_s) * 1000;
+    DBG("Trying to read bytes from modem: ", size);
 
-
-    sendAT(GF("#XRECVHEX="), 100, ",", (uint16_t)size, ",0");
-    if (waitResponse(timeout_ms, GF("#XRECVHEX:")) != 1) {
+    sendAT(GF("#XRECVHEX="), timeout_s, ",", (uint16_t)size, ",0");
+    // RECVHEX waits for timeout_s, Wait for modem response one second longer.
+    if (waitResponse(timeout_ms  + 1000, GF("#XRECVHEX:")) != 1) {
         DBG(" No XRECVHEX response.. Returning with zero read bytes");
-
         return 0;
-
     }
     int datatype = 0;
     //int16_t datatype = streamGetIntBefore(',');
@@ -896,7 +891,7 @@ Serial.println(j);
     }
     if(len_confirmed == 0) {
       //DBG(" SET dataAvailableFlg = false");
-      dataAvailableFlg = false;
+      //dataAvailableFlg = false;
     } else {
       //DBG(" NO SET dataAvailableFlg = false");
     }
@@ -908,42 +903,16 @@ Serial.println(j);
   }
 
   size_t modemGetAvailable(uint8_t mux) {
-    if (!sockets[mux]) return 0;
-    if(dataAvailableFlg == true) {
-      //DBG(" GET dataAvailableFlg = true");
-      return NRF9160_NET_IPV4_MTU_SIZE_RX; // The maximum size for NET_IPV4_MTU is 576 bytes
-    } else {
-      //DBG(" GET dataAvailableFlg = false");
-      // reception complete, close the socket
+  if (!sockets[mux]) return 0;
 
-      // #XSOCKET
-      // op, type, role
-      // op =   1 = port open request
-      // type = 1 = SOCK_STREAM for TCP (protocol)
-      // role = 0 = client
-      uint8_t request_op   = 0; // 1 = port open request
-      uint8_t request_type = 1; // 1 = SOCK_STREAM for TCP (protocol)
-      uint8_t request_role = 0; // 0 = client
-      /*
-      sendAT(GF("#XSOCKET="), GF("0,1,0"));
+  if(sockets[mux]->rx.free() > 200){
+     size_t read_in_available = modemRead(sockets[mux]->rx.free(), mux, 1);
+     DBG("Checking available. Read bytes %d", read_in_available);
+  }
+   size_t rx_size = sockets[mux]->rx.size();
+   DBG("Available bytes %d", rx_size);
 
-      int timeout_s = 5;
-      uint32_t timeout_ms = ((uint32_t)timeout_s) * 1000;
-      if (waitResponse(timeout_ms, GF("#XSOCKET:")) != 1) { return false; }
-      uint8_t result_op       = streamGetIntBefore(',');
-      streamSkipUntil('\n');
-
-      // wait for ok
-      if (waitResponse(timeout_ms, "OK") != 1) { return false; }
-
-      if(result_op == 0) {
-        sockets[mux]->sock_connected = false;
-        DBG("### Closed: ", mux);
-      }
-      */
-
-      return NRF9160_NET_IPV4_MTU_SIZE_RX;
-    }
+   return rx_size;
   }
 
   bool modemGetConnected(uint8_t mux) {
@@ -1058,7 +1027,7 @@ Serial.println(j);
   finish:
     if (!index) {
       data.trim();
-      if (data.length()) { DBG("### Unhandled:", data); }
+      if (data.length()) { DBG("### Unhandled: '", data, "'"); }
       data = "";
     }
     // data.replace(GSM_NL, "/");
