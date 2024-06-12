@@ -804,17 +804,14 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
           }
           stream.printf("%02X", buff[buff_index]);
           uint8_t tempchar = reinterpret_cast<const uint8_t*>(buff)[buff_index];
-          Serial.printf(" %02X", buff[buff_index]);
-      
+                
           //stream.write(reinterpret_cast<const uint8_t*>(buff), len);
         }
         stream.write("\"\r\n", 3);
-        Serial.println();
         stream.flush();
 
         int8_t res1 = waitResponse(timeout_ms, GFP("#XSENDHEX:"), GF("ERROR\r\n"));
-        Serial.print("Received send status ");
-        Serial.println(res1);
+
 
         if(res1 == 1) {
           break;
@@ -845,7 +842,7 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
   }
 
 
-  size_t modemRead(size_t size, uint8_t mux, int timeout_s = 5) {
+  size_t modemRead(size_t size, uint8_t mux, int timeout_s = 1) {
     if (!sockets[mux]) return 0;
     uint32_t timeout_ms = ((uint32_t)timeout_s) * 1000;
     DBG("Trying to read bytes from modem: ", size);
@@ -866,7 +863,7 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
     DBG(" len_confirmed = ", len_confirmed);
 
       // adjust for hex length which is double
-      len_confirmed = len_confirmed / 2;
+      //len_confirmed = len_confirmed ;
 
     if(len_confirmed > 0) {
       for (int i = 0; i < len_confirmed; i++) {
@@ -897,22 +894,28 @@ class TinyGsmNrf9160 : public TinyGsmModem<TinyGsmNrf9160>,
     }
     // DBG("### READ:", len_requested, "from", mux);
     // sockets[mux]->sock_available = modemGetAvailable(mux);
-    sockets[mux]->sock_available = len_confirmed;
-    waitResponse(timeout_ms);
+    //sockets[mux]->sock_available = len_confirmed;
+    //waitResponse(timeout_ms);
     return len_confirmed;
   }
 
+/**
+ * This function does not actually check the avaiable bytes in the 
+ * modem, but reads the bytes to the internal RX buffer.
+ */
   size_t modemGetAvailable(uint8_t mux) {
-  if (!sockets[mux]) return 0;
+    if (!sockets[mux]) return 0;
 
-  if(sockets[mux]->rx.free() > 200){
-     size_t read_in_available = modemRead(sockets[mux]->rx.free(), mux, 1);
-     DBG("Checking available. Read bytes %d", read_in_available);
-  }
-   size_t rx_size = sockets[mux]->rx.size();
-   DBG("Available bytes %d", rx_size);
+    if(sockets[mux]->rx.free() > 10){
+      size_t read_in_available = modemRead(sockets[mux]->rx.free(), mux, 1);
+      DBG("Checking available. Read bytes %d", read_in_available);
+    }
+    size_t rx_size = sockets[mux]->rx.size();
+    DBG("Available bytes %d", rx_size);
 
-   return rx_size;
+   // There are never any bytes available in the buffer, because we already 
+   // put them in to th rx buffer. Always return 0;
+   return 0;
   }
 
   bool modemGetConnected(uint8_t mux) {
